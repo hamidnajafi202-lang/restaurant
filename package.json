@@ -1,0 +1,10 @@
+{
+  "name": "savoria-restaurant-backend",
+  "version": "1.0.0",
+  "description": "Node.js backend + JSON database for the Savoria Restaurant website",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
+
