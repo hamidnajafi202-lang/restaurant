@@ -138,6 +138,70 @@
       padding: 0.1rem 0.5rem; font-size: 0.75rem; font-weight: 800;
     }
 
+    /* Menu Search & Status Lookup Extensions */
+    .menu-search-input {
+      padding: 0.5rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid rgba(200,162,74,0.3);
+      background: rgba(255,255,255,0.05);
+      color: #f8f1e7;
+      font: inherit;
+      font-size: 0.85rem;
+      outline: none;
+      min-width: 180px;
+    }
+    .menu-search-input:focus { border-color: #c8a24a; }
+
+    .track-card {
+      margin-top: 1.5rem;
+      background: #241a0e;
+      border: 1px solid rgba(200,162,74,0.25);
+      border-radius: 18px;
+      padding: 1.2rem;
+    }
+    .track-card h3 { font-family: 'Playfair Display', serif; color: #f8f1e7; font-size: 1.15rem; margin-bottom: 0.8rem; }
+    .track-input-group { display: flex; gap: 0.5rem; }
+    .track-input-group input {
+      flex: 1; padding: 0.6rem 0.8rem; border-radius: 10px;
+      border: 1px solid rgba(200,162,74,0.3); background: rgba(255,255,255,0.05);
+      color: #f8f1e7; font: inherit; font-size: 0.85rem; outline: none;
+    }
+    .track-btn {
+      padding: 0.6rem 1rem; border: none; border-radius: 10px;
+      background: #c8a24a; color: #1a1206; font: inherit; font-weight: 700;
+      font-size: 0.85rem; cursor: pointer; transition: background 0.2s;
+    }
+    .track-btn:hover { background: #d9b45c; }
+    .track-result { margin-top: 0.8rem; font-size: 0.85rem; color: #d8c7ae; display: none; }
+    .track-result.active { display: block; }
+    .status-badge {
+      display: inline-block; padding: 0.2rem 0.6rem; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 700; text-transform: uppercase; margin-top: 0.4rem;
+    }
+    .status-received, .status-pending { background: rgba(200,162,74,0.2); color: #c8a24a; border: 1px solid rgba(200,162,74,0.4); }
+    .status-preparing { background: rgba(59,130,246,0.2); color: #93c5fd; border: 1px solid rgba(59,130,246,0.4); }
+    .status-delivered, .status-completed { background: rgba(34,197,94,0.2); color: #86efac; border: 1px solid rgba(34,197,94,0.4); }
+
+    /* Toast Container */
+    .toast-container {
+      position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 10px; max-width: 320px; pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      background: #2a1f12; border: 1px solid #c8a24a; color: #f8f1e7;
+      padding: 0.8rem 1.2rem; border-radius: 12px; font-size: 0.9rem; font-weight: 500;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      display: flex; align-items: center; gap: 0.6rem;
+      animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    .toast.fade-out { opacity: 0; transform: translateY(10px); }
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
     @media (max-width: 900px) {
       .order-layout { grid-template-columns: 1fr; }
       .cart { position: static; }
@@ -177,6 +241,7 @@
     <div class="order-menu">
       <div class="order-menu-head">
         <h2>Our Menu</h2>
+        <input type="search" class="menu-search-input" id="menuSearch" placeholder="Search menu items..." aria-label="Search menu" />
         <div class="order-tabs" id="orderTabs">
           <button class="order-tab active" data-category="all">All</button>
           <button class="order-tab" data-category="starters">Starters</button>
@@ -217,6 +282,16 @@
         <button type="submit" class="checkout-btn" id="placeOrderBtn">Place Order</button>
       </form>
       <div class="order-msg" id="orderMsg" aria-live="polite"></div>
+
+      <!-- Track Order Section -->
+      <div class="track-card">
+        <h3>Track Your Order</h3>
+        <div class="track-input-group">
+          <input type="text" id="trackOrderId" placeholder="Enter Order ID" />
+          <button type="button" class="track-btn" id="trackOrderBtn">Track</button>
+        </div>
+        <div class="track-result" id="trackResult"></div>
+      </div>
     </aside>
   </div>
 
@@ -254,6 +329,7 @@
     </div>
   </footer>
 
+  <div class="toast-container" id="toastContainer"></div>
   <script src="order.js"></script>
 </body>
 </html>

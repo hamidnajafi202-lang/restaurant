@@ -16,6 +16,7 @@ let menuItems = [];
 // ---------- DOM refs ----------
 const orderGrid = document.getElementById('orderGrid');
 const orderTabs = document.querySelectorAll('.order-tab');
+const menuSearch = document.getElementById('menuSearch');
 const cartItemsEl = document.getElementById('cartItems');
 const cartEmptyEl = document.getElementById('cartEmpty');
 const cartTotalsEl = document.getElementById('cartTotals');
@@ -27,8 +28,24 @@ const cartSubtotalEl = document.getElementById('cartSubtotal');
 const cartDeliveryEl = document.getElementById('cartDelivery');
 const cartTaxEl = document.getElementById('cartTax');
 const cartTotalEl = document.getElementById('cartTotal');
+const toastContainer = document.getElementById('toastContainer');
+const trackOrderId = document.getElementById('trackOrderId');
+const trackOrderBtn = document.getElementById('trackOrderBtn');
+const trackResult = document.getElementById('trackResult');
 
-// ---------- API helpers ----------
+// ---------- Toast Notifications ----------
+function showToast(message) {
+  if (!toastContainer) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `<span>&#10003;</span> <span>${message}</span>`;
+  toastContainer.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('fade-out');
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}
 function api(path, options = {}) {
   return fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -53,9 +70,14 @@ function loadMenu() {
 }
 
 function renderMenu(category) {
-  const items = category === 'all' ? menuItems : menuItems.filter((m) => m.category === category);
+  let items = category === 'all' ? menuItems : menuItems.filter((m) => m.category === category);
+  const query = menuSearch ? menuSearch.value.trim().toLowerCase() : '';
+  if (query) {
+    items = items.filter((m) => m.name.toLowerCase().includes(query) || (m.description && m.description.toLowerCase().includes(query)));
+  }
+
   if (items.length === 0) {
-    orderGrid.innerHTML = '<p class="cart-empty">No items in this category.</p>';
+    orderGrid.innerHTML = '<p class="cart-empty">No matching items found.</p>';
     return;
   }
   orderGrid.innerHTML = items.map((item) => `
@@ -92,6 +114,7 @@ function addToCart(item) {
     cart.push({ ...item, qty: 1 });
   }
   renderCart();
+  showToast(`Added ${item.name} to cart!`);
 }
 
 function changeQty(id, delta) {
@@ -225,7 +248,43 @@ function showMsg(text, type) {
   orderMsg.className = 'order-msg' + (type ? ' ' + type : '');
 }
 
-// ---------- Tabs ----------
+// ---------- Search ----------
+if (menuSearch) {
+  menuSearch.addEventListener('input', () => {
+    const activeTab = document.querySelector('.order-tab.active');
+    const category = activeTab ? activeTab.dataset.category : 'all';
+    renderMenu(category);
+  });
+}
+
+// ---------- Order Tracking ----------
+if (trackOrderBtn) {
+  trackOrderBtn.addEventListener('click', () => {
+    const id = trackOrderId.value.trim();
+    if (!id) {
+      trackResult.innerHTML = '<span style="color:#fca5a5;">Please enter an Order ID.</span>';
+      trackResult.classList.add('active');
+      return;
+    }
+
+    trackResult.innerHTML = '<span style="color:#b7a88e;">Searching order status...</span>';
+    trackResult.classList.add('active');
+
+    api(`/api/orders/${id}`)
+      .then((order) => {
+        const statusClass = `status-${order.status || 'received'}`;
+        trackResult.innerHTML = `
+          <div><strong>Order #${order.id}</strong></div>
+          <div>Customer: ${order.customer ? order.customer.name : 'N/A'}</div>
+          <div>Total: ${Number(order.total).toFixed(2)}</div>
+          <div>Status: <span class="status-badge ${statusClass}">${order.status || 'received'}</span></div>
+        `;
+      })
+      .catch(() => {
+        trackResult.innerHTML = '<span style="color:#fca5a5;">Order not found. Check your ID.</span>';
+      });
+  });
+}
 orderTabs.forEach((tab) => {
   tab.addEventListener('click', () => {
     orderTabs.forEach((t) => t.classList.remove('active'));

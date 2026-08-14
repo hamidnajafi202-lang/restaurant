@@ -274,10 +274,17 @@ const server = http.createServer(async (req, res) => {
   }
 
 // ================= ORDER ROUTES =================
-  // GET /api/orders
-  if (req.method === 'GET' && (pathname === '/api/orders' || pathname === '/api/orders/')) {
+  // GET /api/orders  |  GET /api/orders/:id
+  if (req.method === 'GET' && pathname.startsWith('/api/orders')) {
     const data = readData();
-    sendJson(res, 200, data.orders);
+    const rest = pathname.replace('/api/orders', '').replace(/^\//, '');
+    if (rest === '') {
+      sendJson(res, 200, data.orders);
+    } else {
+      const order = data.orders.find((o) => String(o.id) === rest);
+      if (!order) return sendJson(res, 404, { error: 'Order not found' });
+      sendJson(res, 200, order);
+    }
     return;
   }
 
@@ -376,7 +383,7 @@ const server = http.createServer(async (req, res) => {
     }
     const data = readData();
     const testimonial = {
-      id: crypto.randomBytes(8).toString('hex'),
+      id: body.id || crypto.randomBytes(8).toString('hex'),
       name: body.name,
       role: body.role || 'Guest',
       initials: body.initials || String(body.name).slice(0, 2).toUpperCase(),
@@ -386,6 +393,18 @@ const server = http.createServer(async (req, res) => {
     data.testimonials.push(testimonial);
     writeData(data);
     sendJson(res, 201, testimonial);
+    return;
+  }
+
+  // DELETE /api/testimonials/:id — remove a review
+  if (req.method === 'DELETE' && pathname.startsWith('/api/testimonials/')) {
+    const id = pathname.replace('/api/testimonials/', '');
+    const data = readData();
+    const idx = data.testimonials.findIndex((t) => String(t.id) === id);
+    if (idx === -1) return sendJson(res, 404, { error: 'Testimonial not found' });
+    const [removed] = data.testimonials.splice(idx, 1);
+    writeData(data);
+    sendJson(res, 200, { message: 'Testimonial deleted', testimonial: removed });
     return;
   }
 
@@ -410,6 +429,18 @@ if (req.method === 'GET' && pathname === '/script.js') {
     serveStaticFile(res, path.join(rootDir, 'order.js'), 'application/javascript; charset=utf-8');
     return;
   }
+  if (req.method === 'GET' && (pathname === '/admin' || pathname === '/admin.html')) {
+    serveStaticFile(res, path.join(rootDir, 'admin.html'), 'text/html; charset=utf-8');
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/admin.css') {
+    serveStaticFile(res, path.join(rootDir, 'admin.css'), 'text/css; charset=utf-8');
+    return;
+  }
+  if (req.method === 'GET' && pathname === '/admin.js') {
+    serveStaticFile(res, path.join(rootDir, 'admin.js'), 'application/javascript; charset=utf-8');
+    return;
+  }
 
   sendJson(res, 404, { error: 'Route not found' });
 });
@@ -424,5 +455,7 @@ server.listen(port, () => {
   console.log(`  POST /api/reservations`);
   console.log(`  GET  /api/testimonials`);
   console.log(`  POST /api/testimonials`);
+  console.log(`  DELETE /api/testimonials/:id`);
+  console.log(`  Admin panel: http://localhost:${port}/admin`);
 });
 
