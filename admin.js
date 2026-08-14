@@ -126,8 +126,16 @@ async function loadAllData() {
     if (ordRes.status === 'fulfilled') orders = ordRes.value;
     if (testRes.status === 'fulfilled') testimonials = testRes.value;
     renderAll();
+    updateLastUpdated();
   } catch (err) {
     console.error('Failed to load data', err);
+  }
+}
+
+function updateLastUpdated() {
+  const el = document.getElementById('lastUpdated');
+  if (el) {
+    el.textContent = '✓ Updated ' + new Date().toLocaleTimeString();
   }
 }
 

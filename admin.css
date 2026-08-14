@@ -266,6 +266,17 @@ body {
   font-weight: 700;
 }
 
+.last-updated {
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  background: var(--green-soft);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .icon-btn {
   padding: 0.5rem 0.9rem;
   border: 1px solid var(--border);
