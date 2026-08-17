@@ -5,11 +5,18 @@
  * Run with:  node server.js
  * Then visit: http://localhost:4000
  */
+require('dotenv').config();
+const { createClient } = require('@supabase/supabase-js');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
 const crypto = require('crypto');
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
 const port = process.env.PORT || 4000;
 const rootDir = __dirname;
@@ -132,26 +139,46 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ================= MENU ROUTES =================
-  // GET /api/menu  |  GET /api/menu?category=pizza  |  GET /api/menu/:id
-  if (req.method === 'GET' && pathname.startsWith('/api/menu')) {
-    const data = readData();
-    const rest = pathname.replace('/api/menu', '').replace(/^\//, '');
-    if (rest === '') {
-      const category = reqUrl.query.category;
-      let items = data.menu;
-      if (category) {
-        items = items.filter((m) => String(m.category).toLowerCase() === String(category).toLowerCase());
-      }
-      sendJson(res, 200, items);
-    } else {
-      const item = data.menu.find((m) => String(m.id) === rest);
-      if (!item) return sendJson(res, 404, { error: 'Menu item not found' });
-      sendJson(res, 200, item);
-    }
-    return;
+ // ================= MENU ROUTES =================
+// GET /api/menu  |  GET /api/menu?category=pizza  |  GET /api/menu/:id
+if (req.method === 'GET' && pathname.startsWith('/api/menu')) {
+  const rest = pathname.replace('/api/menu', '').replace(/^\//, '');
+
+  let query = supabase
+    .from('menu')
+    .select('*');
+
+  const category = reqUrl.query.category;
+
+  if (category) {
+    query = query.ilike('category', category);
   }
 
+  const { data: items, error } = await query;
+
+  if (error) {
+    console.error('Supabase menu error:', error);
+    return sendJson(res, 500, {
+      error: 'Failed to load menu'
+    });
+  }
+
+  if (rest === '') {
+    sendJson(res, 200, items);
+  } else {
+    const item = items.find((m) => String(m.id) === rest);
+
+    if (!item) {
+      return sendJson(res, 404, {
+        error: 'Menu item not found'
+      });
+    }
+
+    sendJson(res, 200, item);
+  }
+
+  return;
+}
   // POST /api/menu — add a new menu item
   if (req.method === 'POST' && (pathname === '/api/menu' || pathname === '/api/menu/')) {
     const body = await readBody(req);
@@ -204,169 +231,342 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ================= RESERVATION ROUTES =================
-  // GET /api/reservations
-  if (req.method === 'GET' && (pathname === '/api/reservations' || pathname === '/api/reservations/')) {
-    const data = readData();
-    sendJson(res, 200, data.reservations);
-    return;
+ // ================= RESERVATION ROUTES =================
+
+// GET /api/reservations
+if (
+  req.method === 'GET' &&
+  (pathname === '/api/reservations' || pathname === '/api/reservations/')
+) {
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Supabase reservations error:', error);
+    return sendJson(res, 500, {
+      error: 'Failed to load reservations'
+    });
   }
 
-  // POST /api/reservations — create a reservation
-  if (req.method === 'POST' && (pathname === '/api/reservations' || pathname === '/api/reservations/')) {
-    const body = await readBody(req);
-    if (!validReservation(body)) {
-      return sendJson(res, 400, {
-        error: 'Please provide a valid name (min 2 chars), email, date, and time.'
-      });
-    }
-    const data = readData();
-    const reservation = {
-      id: crypto.randomBytes(8).toString('hex'),
-      name: body.name.trim(),
-      email: body.email.trim(),
-      phone: body.phone ? String(body.phone).trim() : '',
-      date: body.date,
-      time: body.time,
-      guests: Number(body.guests) || 2,
-      notes: body.notes || '',
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    };
-    data.reservations.push(reservation);
-    writeData(data);
-    sendJson(res, 201, reservation);
-    return;
+  sendJson(res, 200, data);
+  return;
+}
+
+// POST /api/reservations — create a reservation
+if (
+  req.method === 'POST' &&
+  (pathname === '/api/reservations' || pathname === '/api/reservations/')
+) {
+  const body = await readBody(req);
+
+  if (!validReservation(body)) {
+    return sendJson(res, 400, {
+      error: 'Please provide a valid name (min 2 chars), email, date, and time.'
+    });
   }
 
-  // PUT /api/reservations/:id — update a reservation (e.g., change status)
-  if (req.method === 'PUT' && pathname.startsWith('/api/reservations/')) {
-    const id = pathname.replace('/api/reservations/', '');
-    const body = await readBody(req);
-    const data = readData();
-    const reservation = data.reservations.find((r) => String(r.id) === id);
-    if (!reservation) return sendJson(res, 404, { error: 'Reservation not found' });
+  const reservation = {
+    id: crypto.randomBytes(8).toString('hex'),
+    name: body.name.trim(),
+    email: body.email.trim(),
+    phone: body.phone ? String(body.phone).trim() : '',
+    date: body.date,
+    time: body.time,
+    guests: Number(body.guests) || 2,
+    notes: body.notes || '',
+    status: 'pending',
+    created_at: new Date().toISOString()
+  };
 
-    if (body.status !== undefined) reservation.status = body.status;
-    if (body.name !== undefined) reservation.name = body.name;
-    if (body.email !== undefined) reservation.email = body.email;
-    if (body.phone !== undefined) reservation.phone = body.phone;
-    if (body.date !== undefined) reservation.date = body.date;
-    if (body.time !== undefined) reservation.time = body.time;
-    if (body.guests !== undefined) reservation.guests = Number(body.guests) || reservation.guests;
-    if (body.notes !== undefined) reservation.notes = body.notes;
+  const { data, error } = await supabase
+    .from('reservations')
+    .insert([reservation])
+    .select()
+    .single();
 
-    writeData(data);
-    sendJson(res, 200, reservation);
-    return;
+  if (error) {
+    console.error('Supabase reservation error:', error);
+    return sendJson(res, 500, {
+      error: 'Failed to create reservation'
+    });
   }
 
-  // DELETE /api/reservations/:id — cancel a reservation
-  if (req.method === 'DELETE' && pathname.startsWith('/api/reservations/')) {
-    const id = pathname.replace('/api/reservations/', '');
-    const data = readData();
-    const idx = data.reservations.findIndex((r) => String(r.id) === id);
-    if (idx === -1) return sendJson(res, 404, { error: 'Reservation not found' });
-    const [removed] = data.reservations.splice(idx, 1);
-    writeData(data);
-    sendJson(res, 200, { message: 'Reservation deleted', reservation: removed });
-    return;
-  }
+  sendJson(res, 201, data);
+  return;
+}
 
 // ================= ORDER ROUTES =================
-  // GET /api/orders  |  GET /api/orders/:id
-  if (req.method === 'GET' && pathname.startsWith('/api/orders')) {
-    const data = readData();
-    const rest = pathname.replace('/api/orders', '').replace(/^\//, '');
-    if (rest === '') {
-      sendJson(res, 200, data.orders);
-    } else {
-      const order = data.orders.find((o) => String(o.id) === rest);
-      if (!order) return sendJson(res, 404, { error: 'Order not found' });
-      sendJson(res, 200, order);
-    }
-    return;
+
+// GET /api/orders
+// GET /api/orders/:id
+if (req.method === 'GET' && pathname.startsWith('/api/orders')) {
+  const rest = pathname.replace('/api/orders', '').replace(/^\//, '');
+
+  let query = supabase
+    .from('orders')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (rest !== '') {
+    query = query.eq('id', rest).single();
   }
 
-  // POST /api/orders — create a delivery/takeaway order
-  if (req.method === 'POST' && (pathname === '/api/orders' || pathname === '/api/orders/')) {
-    const body = await readBody(req);
-    if (!body.customer || !body.customer.name || !validEmail(body.customer.email)) {
-      return sendJson(res, 400, { error: 'A valid customer name and email are required.' });
-    }
-    if (!Array.isArray(body.items) || body.items.length === 0) {
-      return sendJson(res, 400, { error: 'Your cart is empty. Add at least one item.' });
+  const { data, error } = await query;
+if (error) {
+  console.error('SUPABASE ORDERS ERROR CODE:', error.code);
+  console.error('SUPABASE ORDERS ERROR MESSAGE:', error.message);
+  console.error('SUPABASE ORDERS ERROR DETAILS:', error.details);
+  console.error('SUPABASE ORDERS ERROR HINT:', error.hint);
+
+  return sendJson(res, 500, {
+    error: error.message,
+    code: error.code
+  });
+}
+
+  if (rest !== '') {
+    if (!data) {
+      return sendJson(res, 404, {
+        error: 'Order not found'
+      });
     }
 
-    const data = readData();
-    // Recompute prices from the menu database to prevent tampering
-    const items = body.items.map((it) => {
-      const menuItem = data.menu.find((m) => String(m.id) === String(it.id));
-      const unitPrice = menuItem ? Number(menuItem.price) : Number(it.price) || 0;
-      const qty = Math.max(1, parseInt(it.qty, 10) || 1);
-      return {
-        id: String(it.id),
-        name: menuItem ? menuItem.name : it.name || 'Item',
-        qty,
-        price: unitPrice,
-        subtotal: unitPrice * qty
-      };
+    sendJson(res, 200, data);
+  } else {
+    sendJson(res, 200, data || []);
+  }
+
+  return;
+}
+
+
+// POST /api/orders
+if (
+  req.method === 'POST' &&
+  (pathname === '/api/orders' || pathname === '/api/orders/')
+) {
+  const body = await readBody(req);
+
+  // Validate customer
+  if (
+    !body.customer ||
+    !body.customer.name ||
+    !validEmail(body.customer.email)
+  ) {
+    return sendJson(res, 400, {
+      error: 'A valid customer name and email are required.'
     });
+  }
 
-    const subtotal = items.reduce((sum, it) => sum + it.subtotal, 0);
-    const deliveryFee = body.deliveryType === 'delivery' ? 4.99 : 0;
-    const tax = Math.round(subtotal * 0.08 * 100) / 100;
-    const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
+  // Validate cart
+  if (!Array.isArray(body.items) || body.items.length === 0) {
+    return sendJson(res, 400, {
+      error: 'Your cart is empty. Add at least one item.'
+    });
+  }
 
-    const order = {
-      id: crypto.randomBytes(8).toString('hex'),
-      customer: {
-        name: body.customer.name.trim(),
-        email: body.customer.email.trim(),
-        phone: body.customer.phone ? String(body.customer.phone).trim() : ''
-      },
-      deliveryType: body.deliveryType === 'pickup' ? 'pickup' : 'delivery',
-      address: body.address ? String(body.address).trim() : '',
-      items,
-      subtotal,
-      deliveryFee,
-      tax,
-      total,
-      status: 'received',
-      createdAt: new Date().toISOString()
+  // Get menu from Supabase
+  const { data: menu, error: menuError } = await supabase
+    .from('menu')
+    .select('*');
+
+  if (menuError) {
+    console.error('Supabase menu error:', menuError);
+
+    return sendJson(res, 500, {
+      error: 'Failed to load menu'
+    });
+  }
+
+  // Recalculate prices from database
+  const items = body.items.map((it) => {
+    const menuItem = menu.find(
+      (m) => String(m.id) === String(it.id)
+    );
+
+    const unitPrice = menuItem
+      ? Number(menuItem.price)
+      : Number(it.price) || 0;
+
+    const qty = Math.max(
+      1,
+      parseInt(it.qty, 10) || 1
+    );
+
+    return {
+      id: String(it.id),
+      name: menuItem
+        ? menuItem.name
+        : it.name || 'Item',
+      qty,
+      price: unitPrice,
+      subtotal: unitPrice * qty
     };
+  });
 
-    data.orders.push(order);
-    writeData(data);
-    sendJson(res, 201, order);
-    return;
+  // Calculate totals
+  const subtotal = items.reduce(
+    (sum, it) => sum + it.subtotal,
+    0
+  );
+
+  const deliveryFee =
+    body.deliveryType === 'delivery' ? 4.99 : 0;
+
+  const tax =
+    Math.round(subtotal * 0.08 * 100) / 100;
+
+  const total =
+    Math.round(
+      (subtotal + deliveryFee + tax) * 100
+    ) / 100;
+
+  // Create order
+  const order = {
+    customer_name: body.customer.name.trim(),
+    customer_email: body.customer.email.trim(),
+    customer_phone: body.customer.phone
+      ? String(body.customer.phone).trim()
+      : '',
+    delivery_type:
+      body.deliveryType === 'pickup'
+        ? 'pickup'
+        : 'delivery',
+    address: body.address
+      ? String(body.address).trim()
+      : '',
+    items,
+    subtotal,
+    delivery_fee: deliveryFee,
+    tax,
+    total,
+    status: 'received'
+  };
+
+  // Insert into Supabase
+  const { data, error } = await supabase
+    .from('orders')
+    .insert([order])
+    .select()
+    .single();
+
+  if (error) {
+    console.error(
+      'Supabase order INSERT error:',
+      error
+    );
+
+    return sendJson(res, 500, {
+      error: 'Failed to create order'
+    });
+  }
+  const responseOrder = {
+  id: data.id,
+  customer: {
+    name: data.customer_name,
+    email: data.customer_email,
+    phone: data.customer_phone
+  },
+  deliveryType: data.delivery_type,
+  address: data.address,
+  items: data.items,
+  subtotal: Number(data.subtotal),
+  deliveryFee: Number(data.delivery_fee),
+  tax: Number(data.tax),
+  total: Number(data.total),
+  status: data.status,
+  created_at: data.created_at
+};
+
+sendJson(res, 201, responseOrder);
+return;
+
+  sendJson(res, 201, data);
+  return;
+}
+
+
+// PUT /api/orders/:id
+if (
+  req.method === 'PUT' &&
+  pathname.startsWith('/api/orders/')
+) {
+  const id = pathname.replace('/api/orders/', '');
+  const body = await readBody(req);
+
+  const { data, error } = await supabase
+    .from('orders')
+    .update({
+      ...(body.status !== undefined
+        ? { status: body.status }
+        : {})
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(
+      'Supabase order UPDATE error:',
+      error
+    );
+
+    return sendJson(res, 500, {
+      error: 'Failed to update order'
+    });
   }
 
-  // PUT /api/orders/:id — update order status
-  if (req.method === 'PUT' && pathname.startsWith('/api/orders/')) {
-    const id = pathname.replace('/api/orders/', '');
-    const body = await readBody(req);
-    const data = readData();
-    const order = data.orders.find((o) => String(o.id) === id);
-    if (!order) return sendJson(res, 404, { error: 'Order not found' });
-    if (body.status !== undefined) order.status = body.status;
-    writeData(data);
-    sendJson(res, 200, order);
-    return;
+  if (!data) {
+    return sendJson(res, 404, {
+      error: 'Order not found'
+    });
   }
 
-  // DELETE /api/orders/:id — cancel an order
-  if (req.method === 'DELETE' && pathname.startsWith('/api/orders/')) {
-    const id = pathname.replace('/api/orders/', '');
-    const data = readData();
-    const idx = data.orders.findIndex((o) => String(o.id) === id);
-    if (idx === -1) return sendJson(res, 404, { error: 'Order not found' });
-    const [removed] = data.orders.splice(idx, 1);
-    writeData(data);
-    sendJson(res, 200, { message: 'Order deleted', order: removed });
-    return;
+  sendJson(res, 200, data);
+  return;
+}
+
+
+// DELETE /api/orders/:id
+if (
+  req.method === 'DELETE' &&
+  pathname.startsWith('/api/orders/')
+) {
+  const id = pathname.replace('/api/orders/', '');
+
+  const { data, error } = await supabase
+    .from('orders')
+    .delete()
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(
+      'Supabase order DELETE error:',
+      error
+    );
+
+    return sendJson(res, 500, {
+      error: 'Failed to delete order'
+    });
   }
 
+  if (!data) {
+    return sendJson(res, 404, {
+      error: 'Order not found'
+    });
+  }
+
+  sendJson(res, 200, {
+    message: 'Order deleted',
+    order: data
+  });
+
+  return;
+}
   // ================= TESTIMONIAL ROUTES =================
   // GET /api/testimonials
   if (req.method === 'GET' && (pathname === '/api/testimonials' || pathname === '/api/testimonials/')) {
