@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;0,800;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2" />
   <style>
     .order-hero {
       padding: 6rem 6% 3rem;
@@ -89,6 +89,14 @@
     }
     .cart-title { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: #f8f1e7; margin-bottom: 1rem; }
     .cart-empty { color: #b7a88e; font-size: 0.95rem; text-align: center; padding: 1.5rem 0; }
+    /* Capped + independently scrollable (roughly 3 rows before it scrolls) so
+       a long order never pushes the totals/checkout/submit button down —
+       you never have to scroll anything, page or panel, to place the order. */
+    #cartItems {
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 0.3rem;
+    }
     .cart-item { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.6rem 0; border-bottom: 1px solid rgba(200,162,74,0.12); }
     .cart-item-info { flex: 1; min-width: 0; }
     .cart-item-name { color: #f8f1e7; font-weight: 600; font-size: 0.9rem; }
@@ -205,6 +213,7 @@
     @media (max-width: 900px) {
       .order-layout { grid-template-columns: 1fr; }
       .cart { position: static; }
+      #cartItems { max-height: 320px; }
     }
   </style>
 </head>
@@ -330,6 +339,6 @@
   </footer>
 
   <div class="toast-container" id="toastContainer"></div>
-  <script src="order.js"></script>
+  <script src="order.js?v=2"></script>
 </body>
 </html>

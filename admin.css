@@ -287,9 +287,38 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
 }
 
 .icon-btn:hover { background: rgba(255, 255, 255, 0.1); }
+
+/* ============ ICONS ============ */
+/* Shared inline-SVG icon system — replaces emoji throughout the panel. */
+.icon {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+}
+
+.login-logo, .brand { display: flex; align-items: center; gap: 0.5rem; }
+.login-logo .icon { width: 1.4rem; height: 1.4rem; color: var(--gold); }
+.brand .icon { width: 1.3rem; height: 1.3rem; color: var(--gold); }
+
+.nav-link { display: flex; align-items: center; gap: 0.65rem; }
+.nav-link .icon { width: 1.05em; height: 1.05em; }
+
+.view-site { display: inline-flex; align-items: center; gap: 0.5rem; }
+.icon-btn .icon { width: 1em; height: 1em; margin-right: 0.4rem; }
+
+.stat-icon svg { width: 22px; height: 22px; color: var(--gold); }
+
+.card h3 { display: flex; align-items: center; gap: 0.5rem; }
+.card h3 .icon { width: 1em; height: 1em; }
+
+.action-btn { display: inline-flex; align-items: center; gap: 0.3rem; }
+.action-btn .icon { width: 13px; height: 13px; }
 
 /* ============ STATS ============ */
 .stats-grid {

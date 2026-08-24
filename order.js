@@ -1,10 +1,19 @@
 // Savoria Online Ordering & Delivery
-// When the page is served over http/https (via the Node server), use relative
-// API paths. When opened directly from the file system (file://), fall back to
-// the local backend server so the menu and orders still work.
-const API_BASE = window.location.protocol === 'file:'
-  ? 'http://localhost:4000'
-  : '';
+// The page can be viewed several ways: served by our own Node backend
+// (localhost:4000), opened directly from disk (file://), or previewed through
+// an unrelated static server (e.g. VS Code's Live Server on :5500) that knows
+// nothing about our /api routes. Try the current origin first, then fall back
+// to the Node backend directly, so ordering works no matter how the page was
+// opened.
+function getApiBase() {
+  const urls = [];
+  if (window.location.protocol !== 'file:') {
+    urls.push(window.location.origin);
+  }
+  urls.push('http://localhost:4000');
+  urls.push('http://127.0.0.1:4000');
+  return [...new Set(urls)];
+}
 const DELIVERY_FEE = 4.99;
 const TAX_RATE = 0.08;
 
@@ -46,15 +55,23 @@ function showToast(message) {
     setTimeout(() => toast.remove(), 300);
   }, 2500);
 }
-function api(path, options = {}) {
-  return fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
-  }).then(async (res) => {
-    const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
-    return data;
-  });
+async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  let lastError = null;
+  for (const base of getApiBase()) {
+    try {
+      const res = await fetch(`${base}${path}`, { ...options, headers });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        lastError = new Error((data && data.error) || `Request failed (${res.status})`);
+        continue;
+      }
+      return data;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('Network error');
 }
 
 // ---------- Load Menu ----------
@@ -292,6 +309,16 @@ orderTabs.forEach((tab) => {
     renderMenu(tab.dataset.category);
   });
 });
+
+// ---------- Navbar scroll effect ----------
+// Without this, the fixed navbar stays permanently transparent on this page,
+// so menu photos scroll up and show straight through the logo/nav links.
+const navbar = document.getElementById('navbar');
+function onNavScroll() {
+  if (navbar) navbar.classList.toggle('scrolled', window.scrollY > 60);
+}
+window.addEventListener('scroll', onNavScroll, { passive: true });
+onNavScroll();
 
 // ---------- Mobile nav ----------
 const hamburger = document.getElementById('hamburger');

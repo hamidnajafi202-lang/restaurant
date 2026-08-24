@@ -112,6 +112,14 @@ navLinks.forEach((link) => {
   });
 });
 
+
+function updateLastUpdated() {
+  const el = document.getElementById('lastUpdated');
+  if (el) {
+    el.innerHTML = `${ICONS.check} Updated ${new Date().toLocaleTimeString()}`;
+  }
+}
+
 // ---------- Load all data ----------
 async function loadAllData() {
   try {
@@ -132,12 +140,25 @@ async function loadAllData() {
   }
 }
 
-function updateLastUpdated() {
-  const el = document.getElementById('lastUpdated');
-  if (el) {
-    el.textContent = '✓ Updated ' + new Date().toLocaleTimeString();
-  }
+// ---------- Icons ----------
+// Small inline-SVG icon set used in place of emoji throughout the panel.
+function svgIcon(paths) {
+  return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 }
+
+const ICONS = {
+  edit: svgIcon('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>'),
+  trash: svgIcon('<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>'),
+  eye: svgIcon('<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>'),
+  flame: svgIcon('<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>'),
+  checkCircle: svgIcon('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'),
+  truck: svgIcon('<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>'),
+  xCircle: svgIcon('<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'),
+  check: svgIcon('<polyline points="20 6 9 17 4 12"/>'),
+  checkCheck: svgIcon('<path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>'),
+  clock: svgIcon('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),
+  phone: svgIcon('<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>')
+};
 
 // ---------- Render helpers ----------
 function escapeHtml(str) {
@@ -155,6 +176,30 @@ function formatDate(iso) {
     return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   } catch {
     return iso || '';
+  }
+}
+
+function formatDateTime(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return `${date}<span class="cell-email" style="display:block;">${time}</span>`;
+  } catch {
+    return iso || '—';
+  }
+}
+
+function formatDateTimeInline(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return iso || '—';
   }
 }
 
@@ -176,13 +221,16 @@ function renderDashboard() {
   document.getElementById('statRevenue').textContent = formatMoney(revenue);
 
   const recentOrdersEl = document.getElementById('recentOrders');
-  const sortedOrders = [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5);
+const sortedOrders = [...orders]
+  .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  .slice(0, 5);
   recentOrdersEl.innerHTML = sortedOrders.length
     ? sortedOrders.map((o) => `
       <li>
         <div>
           <div class="recent-name">${escapeHtml(o.customer?.name || 'Guest')}</div>
           <div class="recent-meta">${(o.items || []).map((i) => `${escapeHtml(i.name)} × ${i.qty}`).join(', ') || '—'}</div>
+          <div class="recent-meta">${ICONS.clock} ${formatDateTimeInline(o.createdAt)}</div>
         </div>
         <div style="text-align:right;">
           <div class="recent-car">${formatMoney(o.total)}</div>
@@ -240,8 +288,8 @@ function renderMenu() {
         <td>${escapeHtml(item.category || '')}</td>
         <td class="cell-gold">${formatMoney(item.price)}</td>
         <td>
-          <button class="action-btn gold" onclick="editMenu('${item.id}')">✏️ Edit</button>
-          <button class="action-btn red" onclick="deleteMenu('${item.id}')">🗑️ Delete</button>
+          <button class="action-btn gold" onclick="editMenu('${item.id}')">${ICONS.edit} Edit</button>
+          <button class="action-btn red" onclick="deleteMenu('${item.id}')">${ICONS.trash} Delete</button>
         </td>
       </tr>
     `).join('')
@@ -336,10 +384,10 @@ function renderReservations() {
         <td>${escapeHtml(r.phone || '—')}</td>
         <td>${statusBadge(r.status)}</td>
         <td>
-          <button class="action-btn green" onclick="updateReservation('${r.id}','confirmed')">✓ Confirm</button>
-          <button class="action-btn blue" onclick="updateReservation('${r.id}','completed')">✔ Complete</button>
-          <button class="action-btn red" onclick="updateReservation('${r.id}','cancelled')">✕ Cancel</button>
-          <button class="action-btn red" onclick="deleteReservation('${r.id}')">🗑️</button>
+          <button class="action-btn green" onclick="updateReservation('${r.id}','confirmed')">${ICONS.check} Confirm</button>
+          <button class="action-btn blue" onclick="updateReservation('${r.id}','completed')">${ICONS.checkCheck} Complete</button>
+          <button class="action-btn red" onclick="updateReservation('${r.id}','cancelled')">${ICONS.xCircle} Cancel</button>
+          <button class="action-btn red" onclick="deleteReservation('${r.id}')">${ICONS.trash}</button>
         </td>
       </tr>
     `).join('')
@@ -390,20 +438,21 @@ function renderOrders() {
           <strong>${escapeHtml(o.customer?.name || 'Guest')}</strong>
           <div class="cell-email">${escapeHtml(o.customer?.email || '')}</div>
         </td>
+        <td class="cell-email">${formatDateTime(o.createdAt)}</td>
         <td>${escapeHtml(o.deliveryType || 'pickup')}</td>
         <td>${(o.items || []).map((i) => `${escapeHtml(i.name)} × ${i.qty}`).join(', ') || '—'}</td>
         <td class="cell-gold">${formatMoney(o.total)}</td>
         <td>${statusBadge(o.status)}</td>
         <td>
-          <button class="action-btn blue" onclick="viewOrder('${o.id}')">👁️ View</button>
-          <button class="action-btn gold" onclick="updateOrder('${o.id}','preparing')">🍳 Prep</button>
-          <button class="action-btn green" onclick="updateOrder('${o.id}','ready')">✅ Ready</button>
-          <button class="action-btn green" onclick="updateOrder('${o.id}','delivered')">🚚 Deliver</button>
-          <button class="action-btn red" onclick="updateOrder('${o.id}','cancelled')">✕ Cancel</button>
+          <button class="action-btn blue" onclick="viewOrder('${o.id}')">${ICONS.eye} View</button>
+          <button class="action-btn gold" onclick="updateOrder('${o.id}','preparing')">${ICONS.flame} Prep</button>
+          <button class="action-btn green" onclick="updateOrder('${o.id}','ready')">${ICONS.checkCircle} Ready</button>
+          <button class="action-btn green" onclick="updateOrder('${o.id}','delivered')">${ICONS.truck} Deliver</button>
+          <button class="action-btn red" onclick="updateOrder('${o.id}','cancelled')">${ICONS.xCircle} Cancel</button>
         </td>
       </tr>
     `).join('')
-    : '<tr><td colspan="7" class="empty-state">No orders found</td></tr>';
+    : '<tr><td colspan="8" class="empty-state">No orders found</td></tr>';
 }
 
 orderSearch.addEventListener('input', renderOrders);
@@ -437,13 +486,13 @@ window.viewOrder = function (id) {
       <h4>Customer</h4>
       <p><strong>${escapeHtml(o.customer?.name || 'Guest')}</strong></p>
       <p>${escapeHtml(o.customer?.email || '')}</p>
-      ${o.customer?.phone ? `<p>📞 ${escapeHtml(o.customer.phone)}</p>` : ''}
+      ${o.customer?.phone ? `<p>${ICONS.phone} ${escapeHtml(o.customer.phone)}</p>` : ''}
     </div>
     <div class="order-detail-section">
       <h4>Delivery</h4>
       <p>Type: <strong>${escapeHtml(o.deliveryType || 'pickup')}</strong></p>
       ${o.address ? `<p>Address: ${escapeHtml(o.address)}</p>` : ''}
-      <p>Ordered: ${formatDate(o.createdAt)}</p>
+      <p>Ordered: ${formatDateTime(o.createdAt)}</p>
       <p>Status: ${statusBadge(o.status)}</p>
     </div>
     <div class="order-detail-section">
@@ -478,7 +527,7 @@ function renderTestimonials() {
         <td class="cell-gold">${'★'.repeat(Math.max(1, Math.min(5, Number(t.rating) || 5)))}</td>
         <td>${escapeHtml(t.text).slice(0, 80)}${(t.text || '').length > 80 ? '...' : ''}</td>
         <td>
-          <button class="action-btn red" onclick="deleteTestimonial('${t.id}')">🗑️ Delete</button>
+          <button class="action-btn red" onclick="deleteTestimonial('${t.id}')">${ICONS.trash} Delete</button>
         </td>
       </tr>
     `).join('')

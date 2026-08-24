@@ -36,7 +36,17 @@ function readData() {
     fs.writeFileSync(dataFile, JSON.stringify(defaultData, null, 2));
   }
   const raw = fs.readFileSync(dataFile, 'utf8');
-  const data = JSON.parse(raw);
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (err) {
+    // Corrupted/partially-written data.json used to crash the whole process
+    // (JSON.parse throwing synchronously inside an async route handler).
+    // Fall back to a fresh default DB instead of taking the server down.
+    console.error('data.json is corrupted, resetting to defaults:', err.message);
+    data = { ...defaultData };
+    writeData(data);
+  }
   if (!data.menu) data.menu = [];
   if (!data.reservations) data.reservations = [];
   if (!data.orders) data.orders = [];
@@ -95,6 +105,31 @@ function validEmail(email) {
   return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+// Supabase stores orders in snake_case; the frontend (order.js/admin.js) expects
+// camelCase fields like customer.name, deliveryType, createdAt. Without this
+// mapping, GET /api/orders returns raw rows and the admin panel shows orders
+// as blank/empty even though they exist in the database.
+function mapOrder(data) {
+  if (!data) return data;
+  return {
+    id: data.id,
+    customer: {
+      name: data.customer_name,
+      email: data.customer_email,
+      phone: data.customer_phone
+    },
+    deliveryType: data.delivery_type,
+    address: data.address,
+    items: data.items,
+    subtotal: Number(data.subtotal),
+    deliveryFee: Number(data.delivery_fee),
+    tax: Number(data.tax),
+    total: Number(data.total),
+    status: data.status,
+    createdAt: data.created_at
+  };
+}
+
 function validReservation(r) {
   return (
     r &&
@@ -107,6 +142,23 @@ function validReservation(r) {
 
 // ---------------- HTTP server ----------------
 const server = http.createServer(async (req, res) => {
+  // Every route below is handled inside this try/catch. Without it, any
+  // unexpected error (bad input, a Supabase client throwing synchronously,
+  // etc.) becomes an unhandled promise rejection — which by default crashes
+  // the whole Node process instead of just failing the one request.
+  try {
+    await handleRequest(req, res);
+  } catch (err) {
+    console.error('Unhandled request error:', err);
+    if (!res.headersSent) {
+      sendJson(res, 500, { error: 'Internal server error' });
+    } else {
+      res.end();
+    }
+  }
+});
+
+async function handleRequest(req, res) {
   const reqUrl = url.parse(req.url, true);
   const pathname = (reqUrl.pathname || '/').replace(/\/+$/, '') || '/';
 
@@ -185,18 +237,28 @@ if (req.method === 'GET' && pathname.startsWith('/api/menu')) {
     if (!body.name || !body.price || !body.category) {
       return sendJson(res, 400, { error: 'name, price, and category are required' });
     }
-    const data = readData();
     const item = {
       id: body.id || crypto.randomBytes(6).toString('hex'),
       name: body.name,
       price: Number(body.price),
       category: body.category,
       description: body.description || '',
-      image: body.image || ''
+      image: body.image || '',
+      created_at: Date.now()
     };
-    data.menu.push(item);
-    writeData(data);
-    sendJson(res, 201, item);
+
+    const { data, error } = await supabase
+      .from('menu')
+      .insert([item])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase menu INSERT error:', error);
+      return sendJson(res, 500, { error: 'Failed to create menu item' });
+    }
+
+    sendJson(res, 201, data);
     return;
   }
 
@@ -204,30 +266,52 @@ if (req.method === 'GET' && pathname.startsWith('/api/menu')) {
   if (req.method === 'PUT' && pathname.startsWith('/api/menu/')) {
     const id = pathname.replace('/api/menu/', '');
     const body = await readBody(req);
-    const data = readData();
-    const item = data.menu.find((m) => String(m.id) === id);
-    if (!item) return sendJson(res, 404, { error: 'Menu item not found' });
 
-    if (body.name !== undefined) item.name = body.name;
-    if (body.price !== undefined) item.price = Number(body.price) || item.price;
-    if (body.category !== undefined) item.category = body.category;
-    if (body.description !== undefined) item.description = body.description;
-    if (body.image !== undefined) item.image = body.image;
+    const updates = {};
+    if (body.name !== undefined) updates.name = body.name;
+    if (body.price !== undefined) {
+      const price = Number(body.price);
+      if (!Number.isNaN(price)) updates.price = price;
+    }
+    if (body.category !== undefined) updates.category = body.category;
+    if (body.description !== undefined) updates.description = body.description;
+    if (body.image !== undefined) updates.image = body.image;
 
-    writeData(data);
-    sendJson(res, 200, item);
+    const { data, error } = await supabase
+      .from('menu')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase menu UPDATE error:', error);
+      return sendJson(res, 500, { error: 'Failed to update menu item' });
+    }
+    if (!data) return sendJson(res, 404, { error: 'Menu item not found' });
+
+    sendJson(res, 200, data);
     return;
   }
 
   // DELETE /api/menu/:id — remove a menu item
   if (req.method === 'DELETE' && pathname.startsWith('/api/menu/')) {
     const id = pathname.replace('/api/menu/', '');
-    const data = readData();
-    const idx = data.menu.findIndex((m) => String(m.id) === id);
-    if (idx === -1) return sendJson(res, 404, { error: 'Menu item not found' });
-    const [removed] = data.menu.splice(idx, 1);
-    writeData(data);
-    sendJson(res, 200, { message: 'Menu item deleted', item: removed });
+
+    const { data, error } = await supabase
+      .from('menu')
+      .delete()
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase menu DELETE error:', error);
+      return sendJson(res, 500, { error: 'Failed to delete menu item' });
+    }
+    if (!data) return sendJson(res, 404, { error: 'Menu item not found' });
+
+    sendJson(res, 200, { message: 'Menu item deleted', item: data });
     return;
   }
 
@@ -333,9 +417,9 @@ if (error) {
       });
     }
 
-    sendJson(res, 200, data);
+    sendJson(res, 200, mapOrder(data));
   } else {
-    sendJson(res, 200, data || []);
+    sendJson(res, 200, (data || []).map(mapOrder));
   }
 
   return;
@@ -462,28 +546,7 @@ if (
       error: 'Failed to create order'
     });
   }
-  const responseOrder = {
-  id: data.id,
-  customer: {
-    name: data.customer_name,
-    email: data.customer_email,
-    phone: data.customer_phone
-  },
-  deliveryType: data.delivery_type,
-  address: data.address,
-  items: data.items,
-  subtotal: Number(data.subtotal),
-  deliveryFee: Number(data.delivery_fee),
-  tax: Number(data.tax),
-  total: Number(data.total),
-  status: data.status,
-  created_at: data.created_at
-};
-
-sendJson(res, 201, responseOrder);
-return;
-
-  sendJson(res, 201, data);
+  sendJson(res, 201, mapOrder(data));
   return;
 }
 
@@ -524,7 +587,7 @@ if (
     });
   }
 
-  sendJson(res, 200, data);
+  sendJson(res, 200, mapOrder(data));
   return;
 }
 
@@ -562,7 +625,7 @@ if (
 
   sendJson(res, 200, {
     message: 'Order deleted',
-    order: data
+    order: mapOrder(data)
   });
 
   return;
@@ -643,6 +706,17 @@ if (req.method === 'GET' && pathname === '/script.js') {
   }
 
   sendJson(res, 404, { error: 'Route not found' });
+}
+
+// Last-resort safety net: catches anything outside the per-request try/catch
+// above (e.g. from a timer or a listener firing outside a request). Logs
+// instead of letting the default Node behavior kill the process, so a single
+// unexpected error can't take the whole server down.
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception (server kept running):', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection (server kept running):', reason);
 });
 
 server.listen(port, () => {
